@@ -30,6 +30,7 @@ echo "summarize this" | ai
 - `--init` create a default config file.
 - `--history N` replay the N-th most recent response to stdout (1 = last). Colorization obeys `--minimal`.
 - `--history-clear` delete stored history.
+- `--completions <shell>` print shell completions (`bash`, `zsh`, `fish`).
 
 ## Config
 
@@ -88,4 +89,20 @@ Static binary (example for musl on Linux):
 ```bash
 rustup target add x86_64-unknown-linux-musl
 cargo build --release --target x86_64-unknown-linux-musl
+```
+
+## Shell completions
+
+Generate and install (examples):
+
+```bash
+ai --completions bash > /etc/bash_completion.d/ai
+```
+
+```bash
+ai --completions zsh > /usr/local/share/zsh/site-functions/_ai
+```
+
+```bash
+ai --completions fish > ~/.config/fish/completions/ai.fish
 ```

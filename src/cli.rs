@@ -15,6 +15,8 @@ pub struct Cli {
     pub history_clear: bool,
     #[arg(long)]
     pub history: Option<usize>,
+    #[arg(long, value_enum)]
+    pub completions: Option<clap_complete::Shell>,
     #[arg(trailing_var_arg = true)]
     pub args: Vec<String>,
 }

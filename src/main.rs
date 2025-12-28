@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 mod cli;
 mod client;
@@ -25,6 +25,16 @@ async fn real_main() -> Result<()> {
 
     if cli.init && (cli.history_clear || cli.history.is_some()) {
         bail!("--init cannot be combined with history flags");
+    }
+
+    if let Some(shell) = cli.completions {
+        if cli.init || cli.history_clear || cli.history.is_some() {
+            bail!("--completions cannot be combined with other flags");
+        }
+        ensure_no_prompt_args(&cli, "--completions", false)?;
+        let mut cmd = Cli::command();
+        clap_complete::generate(shell, &mut cmd, "ai", &mut std::io::stdout());
+        return Ok(());
     }
 
     if cli.init {
