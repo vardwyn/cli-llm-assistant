@@ -151,7 +151,7 @@ fn record_history(
     history::append_entry(entry, history_max_entries(config))
 }
 
-fn color_thinking(content: &str, delimiters: &[Delimiter]) -> String {
+pub fn color_thinking(content: &str, delimiters: &[Delimiter]) -> String {
     if delimiters.is_empty() {
         return content.to_string();
     }
@@ -161,38 +161,65 @@ fn color_thinking(content: &str, delimiters: &[Delimiter]) -> String {
 
     while index < content.len() {
         let mut next_start = None;
-        let mut next_delim = None;
+        let mut next_start_delim = None;
+        let mut next_end = None;
+        let mut next_end_delim = None;
 
         for delim in delimiters {
-            if delim.start.is_empty() || delim.end.is_empty() {
-                continue;
+            if !delim.start.is_empty() {
+                if let Some(pos) = content[index..].find(&delim.start) {
+                    let abs = index + pos;
+                    if next_start.map_or(true, |current| abs < current) {
+                        next_start = Some(abs);
+                        next_start_delim = Some(delim);
+                    }
+                }
             }
-            if let Some(pos) = content[index..].find(&delim.start) {
-                let abs = index + pos;
-                if next_start.map_or(true, |current| abs < current) {
-                    next_start = Some(abs);
-                    next_delim = Some(delim);
+            if !delim.end.is_empty() {
+                if let Some(pos) = content[index..].find(&delim.end) {
+                    let abs = index + pos;
+                    if next_end.map_or(true, |current| abs < current) {
+                        next_end = Some(abs);
+                        next_end_delim = Some(delim);
+                    }
                 }
             }
         }
 
-        let Some(start_idx) = next_start else {
-            result.push_str(&content[index..]);
-            break;
-        };
+        let next_start_idx = next_start;
+        let next_end_idx = next_end;
 
-        result.push_str(&content[index..start_idx]);
-        let delim = next_delim.expect("delimiter missing");
-        let after_start = start_idx + delim.start.len();
-        if let Some(end_rel) = content[after_start..].find(&delim.end) {
-            let end_idx = after_start + end_rel + delim.end.len();
-            let slice = &content[start_idx..end_idx];
-            result.push_str(&format!("{}", slice.dimmed()));
-            index = end_idx;
-        } else {
-            let slice = &content[start_idx..];
-            result.push_str(&format!("{}", slice.dimmed()));
-            break;
+        match (next_start_idx, next_end_idx) {
+            (None, None) => {
+                result.push_str(&content[index..]);
+                break;
+            }
+            (Some(start_idx), Some(end_idx)) if start_idx <= end_idx => {
+                result.push_str(&content[index..start_idx]);
+                let delim = next_start_delim.expect("start delimiter missing");
+                let after_start = start_idx + delim.start.len();
+                if let Some(end_rel) = content[after_start..].find(&delim.end) {
+                    let end_idx = after_start + end_rel + delim.end.len();
+                    let slice = &content[start_idx..end_idx];
+                    result.push_str(&format!("{}", slice.dimmed()));
+                    index = end_idx;
+                } else {
+                    let slice = &content[start_idx..];
+                    result.push_str(&format!("{}", slice.dimmed()));
+                    break;
+                }
+            }
+            (_, Some(end_idx)) => {
+                let delim = next_end_delim.expect("end delimiter missing");
+                let end_idx = end_idx + delim.end.len();
+                let slice = &content[index..end_idx];
+                result.push_str(&format!("{}", slice.dimmed()));
+                index = end_idx;
+            }
+            _ => {
+                result.push_str(&content[index..]);
+                break;
+            }
         }
     }
 

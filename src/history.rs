@@ -54,7 +54,7 @@ pub fn clear_history() -> Result<()> {
     Ok(())
 }
 
-pub fn replay_response(offset: usize) -> Result<String> {
+pub fn replay_entry(offset: usize) -> Result<HistoryEntry> {
     if offset == 0 {
         bail!("history index must be >= 1");
     }
@@ -67,7 +67,7 @@ pub fn replay_response(offset: usize) -> Result<String> {
         bail!("history only has {} entries", entries.len());
     }
     let index = entries.len() - offset;
-    Ok(entries[index].response.clone())
+    Ok(entries[index].clone())
 }
 
 pub fn now_timestamp() -> Result<u64> {

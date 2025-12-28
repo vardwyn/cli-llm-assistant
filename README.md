@@ -28,7 +28,7 @@ echo "summarize this" | ai
 - `--prompt NAME` select a preset prompt from `[prompts]` for one call.
 - `--minimal` disable status output and thinking colorization for that invocation.
 - `--init` create a default config file.
-- `--history N` replay the N-th most recent response to stdout (1 = last).
+- `--history N` replay the N-th most recent response to stdout (1 = last). Colorization obeys `--minimal`.
 - `--history-clear` delete stored history.
 
 ## Config
@@ -72,6 +72,7 @@ thinking_delimiters = [
 - `system_prompt` (model system prompt) is always applied first.
 - The selected named `prompt` (preset prompt) is applied next.
 - The user input (CLI args or stdin) is applied last.
+- If a response contains only the end delimiter (no start), everything up to that end delimiter is treated as thinking text.
 - `history` is stored in `$XDG_CACHE_HOME/ai/history.json`.
 
 ## Building
