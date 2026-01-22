@@ -21,6 +21,7 @@ pub struct Defaults {
     pub model: String,
     pub prompt: String,
     pub minimal: Option<bool>,
+    pub strip_thinking: Option<bool>,
     #[serde(default)]
     pub thinking_delimiters: Vec<Delimiter>,
 }
@@ -43,6 +44,8 @@ pub struct ModelConfig {
     pub system_prompt: Option<String>,
     pub api_key: Option<String>,
     pub api_key_command: Option<String>,
+    pub options: Option<String>,
+    pub strip_thinking: Option<bool>,
     #[serde(default)]
     pub thinking_delimiters: Vec<Delimiter>,
 }
@@ -79,6 +82,13 @@ fn validate_config(config: &Config) -> Result<()> {
         if model.api_key.is_none() && model.api_key_command.is_none() {
             bail!("model '{name}' must define api_key or api_key_command");
         }
+        if let Some(options) = &model.options {
+            let value: serde_json::Value = serde_json::from_str(options)
+                .with_context(|| format!("model '{name}' options is not valid JSON"))?;
+            if !value.is_object() {
+                bail!("model '{name}' options must be a JSON object");
+            }
+        }
         if model.endpoint.trim().is_empty() {
             bail!("model '{name}' endpoint must not be empty");
         }
@@ -108,6 +118,7 @@ const DEFAULT_CONFIG: &str = r#"[defaults]
 model = "openai"
 prompt = "default"
 minimal = false
+strip_thinking = false
 thinking_delimiters = [
   { start = "<think>", end = "</think>" },
 ]
@@ -125,4 +136,6 @@ model = "gpt-4o-mini"
 system_prompt = ""
 api_key = "YOUR_API_KEY"
 # api_key_command = "pass show openai/api-key"
+# options = "{\"reasoning\":{\"enabled\":true}}"
+# strip_thinking = false
 "#;

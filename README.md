@@ -27,6 +27,7 @@ echo "summarize this" | ai
 - `--model NAME` select a model from `[models]` for one call.
 - `--prompt NAME` select a preset prompt from `[prompts]` for one call.
 - `--minimal` disable status output and thinking colorization for that invocation.
+- `--strip-thinking` remove thinking text from output (before colorization).
 - `--init` create a default config file.
 - `--history N` replay the N-th most recent response to stdout (1 = last). Colorization obeys `--minimal`.
 - `--history-clear` delete stored history.
@@ -43,6 +44,7 @@ The client reads `$XDG_CONFIG_HOME/ai/config.toml` (falls back to `~/.config/ai/
 model = "openai"
 prompt = "concise"
 minimal = false
+strip_thinking = false
 thinking_delimiters = [
   { start = "<think>", end = "</think>" },
   { start = "[thought]", end = "[/thought]" },
@@ -60,6 +62,8 @@ endpoint = "https://api.openai.com"
 model = "gpt-4o-mini"
 system_prompt = "You are a helpful assistant."
 api_key_command = "pass show openai/api-key"
+options = "{\"reasoning\":{\"enabled\":true}}"
+strip_thinking = false
 thinking_delimiters = [
   { start = "<think>", end = "</think>" },
 ]
@@ -73,6 +77,9 @@ thinking_delimiters = [
 - `system_prompt` (model system prompt) is always applied first.
 - The selected named `prompt` (preset prompt) is applied next.
 - The user input (CLI args or stdin) is applied last.
+- `options` (per model) is a raw JSON object merged into the request body; it cannot override `model` or `messages`.
+- `strip_thinking` can be set in defaults or per model; `--strip-thinking` forces it on.
+- If the API returns a separate reasoning field, it is injected before the main content using the configured thinking delimiters (unless the content already contains delimiters).
 - If a response contains only the end delimiter (no start), everything up to that end delimiter is treated as thinking text.
 - `history` is stored in `$XDG_CACHE_HOME/ai/history.json`.
 

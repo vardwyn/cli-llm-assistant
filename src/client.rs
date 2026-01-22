@@ -15,6 +15,7 @@ pub async fn run(cli: &Cli) -> Result<()> {
         .prompt
         .clone()
         .unwrap_or_else(|| config.defaults.prompt.clone());
+    let strip_thinking = resolve_strip_thinking(cli, &config, &model_name)?;
     let minimal = if cli.minimal {
         true
     } else {
@@ -57,10 +58,14 @@ pub async fn run(cli: &Cli) -> Result<()> {
                 }
             }
             status.clear()?;
+            let mut output_text = result.content;
+            if strip_thinking {
+                output_text = strip_thinking_text(&output_text, &result.thinking_delimiters);
+            }
             let output = if colorize {
-                color_thinking(&result.content, &result.thinking_delimiters)
+                color_thinking(&output_text, &result.thinking_delimiters)
             } else {
-                result.content
+                output_text
             };
             print!("{output}");
             io::stdout().flush()?;
@@ -132,6 +137,19 @@ fn history_enabled(config: &Config) -> bool {
 
 fn history_max_entries(config: &Config) -> usize {
     config.history.max_entries.unwrap_or(50)
+}
+
+fn resolve_strip_thinking(cli: &Cli, config: &Config, model_name: &str) -> Result<bool> {
+    if cli.strip_thinking {
+        return Ok(true);
+    }
+    let model = config
+        .models
+        .get(model_name)
+        .with_context(|| format!("model '{}' not found in [models]", model_name))?;
+    Ok(model
+        .strip_thinking
+        .unwrap_or(config.defaults.strip_thinking.unwrap_or(false)))
 }
 
 fn record_history(
@@ -215,6 +233,70 @@ pub fn color_thinking(content: &str, delimiters: &[Delimiter]) -> String {
                 let slice = &content[index..end_idx];
                 result.push_str(&format!("{}", slice.dimmed()));
                 index = end_idx;
+            }
+            _ => {
+                result.push_str(&content[index..]);
+                break;
+            }
+        }
+    }
+
+    result
+}
+
+pub fn strip_thinking_text(content: &str, delimiters: &[Delimiter]) -> String {
+    if delimiters.is_empty() {
+        return content.to_string();
+    }
+
+    let mut result = String::new();
+    let mut index = 0;
+
+    while index < content.len() {
+        let mut next_start = None;
+        let mut next_start_delim = None;
+        let mut next_end = None;
+        let mut next_end_delim = None;
+
+        for delim in delimiters {
+            if !delim.start.is_empty() {
+                if let Some(pos) = content[index..].find(&delim.start) {
+                    let abs = index + pos;
+                    if next_start.map_or(true, |current| abs < current) {
+                        next_start = Some(abs);
+                        next_start_delim = Some(delim);
+                    }
+                }
+            }
+            if !delim.end.is_empty() {
+                if let Some(pos) = content[index..].find(&delim.end) {
+                    let abs = index + pos;
+                    if next_end.map_or(true, |current| abs < current) {
+                        next_end = Some(abs);
+                        next_end_delim = Some(delim);
+                    }
+                }
+            }
+        }
+
+        match (next_start, next_end) {
+            (None, None) => {
+                result.push_str(&content[index..]);
+                break;
+            }
+            (Some(start_idx), Some(end_idx)) if start_idx <= end_idx => {
+                result.push_str(&content[index..start_idx]);
+                let delim = next_start_delim.expect("start delimiter missing");
+                let after_start = start_idx + delim.start.len();
+                if let Some(end_rel) = content[after_start..].find(&delim.end) {
+                    index = after_start + end_rel + delim.end.len();
+                } else {
+                    break;
+                }
+            }
+            (_, Some(end_idx)) => {
+                let delim = next_end_delim.expect("end delimiter missing");
+                index = end_idx + delim.end.len();
             }
             _ => {
                 result.push_str(&content[index..]);

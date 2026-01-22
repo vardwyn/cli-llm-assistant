@@ -3,17 +3,12 @@ use crate::types::Delimiter;
 use anyhow::{bail, Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug)]
 pub struct ChatResult {
     pub content: String,
     pub thinking_delimiters: Vec<Delimiter>,
-}
-
-#[derive(Debug, Serialize)]
-struct ChatRequest {
-    model: String,
-    messages: Vec<Message>,
 }
 
 #[derive(Debug, Serialize)]
@@ -35,6 +30,10 @@ struct Choice {
 #[derive(Debug, Deserialize)]
 struct AssistantMessage {
     content: Option<String>,
+    #[serde(default)]
+    reasoning: Option<Value>,
+    #[serde(default)]
+    reasoning_details: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,16 +81,29 @@ pub async fn chat_completion(
         content: user_input.to_string(),
     });
 
-    let request = ChatRequest {
-        model: model_cfg.model.clone(),
-        messages,
-    };
+    let mut request = serde_json::Map::new();
+    request.insert("model".to_string(), Value::String(model_cfg.model.clone()));
+    request.insert("messages".to_string(), serde_json::to_value(messages)?);
+
+    if let Some(options) = model_cfg.options.as_deref() {
+        let value: Value = serde_json::from_str(options)
+            .with_context(|| format!("options for model '{}' is not valid JSON", model_name))?;
+        let object = value.as_object().with_context(|| {
+            format!("options for model '{}' must be a JSON object", model_name)
+        })?;
+        for (key, value) in object {
+            if request.contains_key(key) {
+                bail!("options for model '{}' cannot override '{key}'", model_name);
+            }
+            request.insert(key.clone(), value.clone());
+        }
+    }
 
     let url = build_chat_url(&model_cfg.endpoint);
     let response = client
         .post(url)
         .bearer_auth(api_key)
-        .json(&request)
+        .json(&Value::Object(request))
         .send()
         .await?;
 
@@ -105,17 +117,32 @@ pub async fn chat_completion(
     }
 
     let parsed: ChatResponse = response.json().await?;
-    let content = parsed
+    let message = parsed
         .choices
         .get(0)
-        .and_then(|choice| choice.message.content.clone())
-        .unwrap_or_default();
+        .map(|choice| &choice.message)
+        .context("missing assistant message in response")?;
+    let mut content = message.content.clone().unwrap_or_default();
+    let reasoning = extract_reasoning(message);
 
     let thinking_delimiters = if !model_cfg.thinking_delimiters.is_empty() {
         model_cfg.thinking_delimiters
     } else {
         config.defaults.thinking_delimiters.clone()
     };
+
+    if let Some(reasoning_text) = reasoning {
+        if !contains_any_delimiter(&content, &thinking_delimiters) {
+            let wrapped = wrap_reasoning(&reasoning_text, &thinking_delimiters);
+            if content.trim().is_empty() {
+                content = wrapped;
+            } else if wrapped.trim().is_empty() {
+                content = reasoning_text + "\n" + &content;
+            } else {
+                content = wrapped + "\n" + &content;
+            }
+        }
+    }
 
     Ok(ChatResult {
         content,
@@ -140,4 +167,59 @@ fn build_chat_url(endpoint: &str) -> String {
     } else {
         format!("{trimmed}/v1/chat/completions")
     }
+}
+
+fn extract_reasoning(message: &AssistantMessage) -> Option<String> {
+    if let Some(value) = &message.reasoning {
+        if let Some(text) = value.as_str() {
+            if !text.trim().is_empty() {
+                return Some(text.to_string());
+            }
+        } else if !value.is_null() {
+            let text = value.to_string();
+            if !text.trim().is_empty() {
+                return Some(text);
+            }
+        }
+    }
+
+    let details = message.reasoning_details.as_ref()?;
+    let mut parts = Vec::new();
+    for item in details {
+        if let Some(text) = item.get("text").and_then(|value| value.as_str()) {
+            if !text.trim().is_empty() {
+                parts.push(text.to_string());
+            }
+        } else if let Some(text) = item.as_str() {
+            if !text.trim().is_empty() {
+                parts.push(text.to_string());
+            }
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n\n"))
+    }
+}
+
+fn contains_any_delimiter(content: &str, delimiters: &[Delimiter]) -> bool {
+    delimiters.iter().any(|delim| {
+        (!delim.start.is_empty() && content.contains(&delim.start))
+            || (!delim.end.is_empty() && content.contains(&delim.end))
+    })
+}
+
+fn wrap_reasoning(reasoning: &str, delimiters: &[Delimiter]) -> String {
+    for delim in delimiters {
+        if !delim.start.is_empty() && !delim.end.is_empty() {
+            return format!("{}{}{}", delim.start, reasoning, delim.end);
+        }
+    }
+    for delim in delimiters {
+        if !delim.end.is_empty() {
+            return format!("{}{}", reasoning, delim.end);
+        }
+    }
+    reasoning.to_string()
 }

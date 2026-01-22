@@ -10,6 +10,8 @@ pub struct Cli {
     #[arg(long)]
     pub minimal: bool,
     #[arg(long)]
+    pub strip_thinking: bool,
+    #[arg(long)]
     pub init: bool,
     #[arg(long)]
     pub history_clear: bool,

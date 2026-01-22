@@ -31,21 +31,21 @@ async fn real_main() -> Result<()> {
         if cli.init || cli.history_clear || cli.history.is_some() {
             bail!("--completions cannot be combined with other flags");
         }
-        ensure_no_prompt_args(&cli, "--completions", false)?;
+        ensure_no_prompt_args(&cli, "--completions", false, false)?;
         let mut cmd = Cli::command();
         clap_complete::generate(shell, &mut cmd, "ai", &mut std::io::stdout());
         return Ok(());
     }
 
     if cli.init {
-        ensure_no_prompt_args(&cli, "--init", false)?;
+        ensure_no_prompt_args(&cli, "--init", false, false)?;
         let path = config::write_default_config()?;
         println!("wrote default config to {}", path.display());
         return Ok(());
     }
 
     if cli.history_clear {
-        ensure_no_prompt_args(&cli, "--history-clear", false)?;
+        ensure_no_prompt_args(&cli, "--history-clear", false, false)?;
         if cli.history.is_some() {
             bail!("--history and --history-clear cannot be used together");
         }
@@ -55,7 +55,7 @@ async fn real_main() -> Result<()> {
     }
 
     if let Some(index) = cli.history {
-        ensure_no_prompt_args(&cli, "--history", true)?;
+        ensure_no_prompt_args(&cli, "--history", true, true)?;
         let config = config::load_config()?;
         let entry = history::replay_entry(index)?;
         let minimal = if cli.minimal {
@@ -63,6 +63,7 @@ async fn real_main() -> Result<()> {
         } else {
             config.defaults.minimal.unwrap_or(false)
         };
+        let strip_thinking = resolve_strip_thinking(&cli, &config, &entry.model)?;
         let stdout_is_tty = std::io::stdout().is_terminal();
         let colorize = stdout_is_tty && !minimal;
         let delimiters = config
@@ -72,10 +73,14 @@ async fn real_main() -> Result<()> {
             .map(|model| model.thinking_delimiters.clone())
             .unwrap_or_else(|| config.defaults.thinking_delimiters.clone());
 
+        let mut output_text = entry.response;
+        if strip_thinking {
+            output_text = client::strip_thinking_text(&output_text, &delimiters);
+        }
         let output = if colorize {
-            client::color_thinking(&entry.response, &delimiters)
+            client::color_thinking(&output_text, &delimiters)
         } else {
-            entry.response
+            output_text
         };
         print!("{output}");
         return Ok(());
@@ -84,12 +89,30 @@ async fn real_main() -> Result<()> {
     client::run(&cli).await
 }
 
-fn ensure_no_prompt_args(cli: &Cli, flag: &str, allow_minimal: bool) -> Result<()> {
+fn ensure_no_prompt_args(
+    cli: &Cli,
+    flag: &str,
+    allow_minimal: bool,
+    allow_strip: bool,
+) -> Result<()> {
     if cli.model.is_some() || cli.prompt.is_some() || !cli.args.is_empty() {
         bail!("{flag} cannot be combined with prompt flags or arguments");
     }
     if !allow_minimal && cli.minimal {
         bail!("{flag} cannot be combined with --minimal");
     }
+    if !allow_strip && cli.strip_thinking {
+        bail!("{flag} cannot be combined with --strip-thinking");
+    }
     Ok(())
+}
+
+fn resolve_strip_thinking(cli: &Cli, config: &config::Config, model_name: &str) -> Result<bool> {
+    if cli.strip_thinking {
+        return Ok(true);
+    }
+    let model = config.models.get(model_name);
+    Ok(model
+        .and_then(|model| model.strip_thinking)
+        .unwrap_or(config.defaults.strip_thinking.unwrap_or(false)))
 }
