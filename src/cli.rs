@@ -19,6 +19,10 @@ pub struct Cli {
     pub history: Option<usize>,
     #[arg(long, value_enum)]
     pub completions: Option<clap_complete::Shell>,
+    #[arg(long)]
+    pub list_models: bool,
+    #[arg(long)]
+    pub list_prompts: bool,
     #[arg(trailing_var_arg = true)]
     pub args: Vec<String>,
 }

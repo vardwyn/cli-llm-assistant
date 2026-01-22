@@ -31,6 +31,8 @@ echo "summarize this" | ai
 - `--init` create a default config file.
 - `--history N` replay the N-th most recent response to stdout (1 = last). Colorization obeys `--minimal`.
 - `--history-clear` delete stored history.
+- `--list-models` print available model names from config.
+- `--list-prompts` print available prompt names from config.
 - `--completions <shell>` print shell completions (`bash`, `zsh`, `fish`).
 
 ## Config

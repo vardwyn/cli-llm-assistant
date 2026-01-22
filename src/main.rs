@@ -1,8 +1,9 @@
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 
 mod cli;
 mod client;
 mod config;
+mod completions;
 mod history;
 mod openai;
 mod paths;
@@ -27,13 +28,36 @@ async fn real_main() -> Result<()> {
         bail!("--init cannot be combined with history flags");
     }
 
+    if cli.list_models || cli.list_prompts {
+        if cli.list_models && cli.list_prompts {
+            bail!("--list-models and --list-prompts cannot be used together");
+        }
+        if cli.init || cli.history_clear || cli.history.is_some() || cli.completions.is_some() {
+            bail!("--list-models/--list-prompts cannot be combined with other modes");
+        }
+        if cli.model.is_some() || cli.prompt.is_some() || !cli.args.is_empty() {
+            bail!("--list-models/--list-prompts cannot be combined with prompt flags or arguments");
+        }
+        let config = config::load_config()?;
+        if cli.list_models {
+            for name in config.models.keys() {
+                println!("{name}");
+            }
+        } else {
+            for name in config.prompts.keys() {
+                println!("{name}");
+            }
+        }
+        return Ok(());
+    }
+
     if let Some(shell) = cli.completions {
         if cli.init || cli.history_clear || cli.history.is_some() {
             bail!("--completions cannot be combined with other flags");
         }
         ensure_no_prompt_args(&cli, "--completions", false, false)?;
-        let mut cmd = Cli::command();
-        clap_complete::generate(shell, &mut cmd, "ai", &mut std::io::stdout());
+        let script = completions::render(shell)?;
+        print!("{script}");
         return Ok(());
     }
 
