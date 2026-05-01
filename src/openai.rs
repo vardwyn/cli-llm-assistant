@@ -31,6 +31,8 @@ struct Choice {
 struct AssistantMessage {
     content: Option<String>,
     #[serde(default)]
+    reasoning_content: Option<String>,
+    #[serde(default)]
     reasoning: Option<Value>,
     #[serde(default)]
     reasoning_details: Option<Vec<Value>>,
@@ -170,6 +172,12 @@ fn build_chat_url(endpoint: &str) -> String {
 }
 
 fn extract_reasoning(message: &AssistantMessage) -> Option<String> {
+    if let Some(text) = &message.reasoning_content {
+        if !text.trim().is_empty() {
+            return Some(text.to_string());
+        }
+    }
+
     if let Some(value) = &message.reasoning {
         if let Some(text) = value.as_str() {
             if !text.trim().is_empty() {
