@@ -1,6 +1,6 @@
 # ai
 
-One-shot CLI for OpenAI-compatible chat endpoints.
+Prompt in, answer out - a tiny CLI client for one-shot chats with OpenAI-compatible LLMs
 
 ## Quick start
 
@@ -22,6 +22,51 @@ You can also pipe stdin:
 echo "summarize this" | ai
 ```
 
+## Examples
+
+Select a configured model for one call:
+
+```bash
+ai --model qwen "explain this error: EADDRINUSE"
+```
+
+Use a preset prompt from `[prompts]`:
+
+```bash
+ai --prompt concise "write a git commit message for these changes"
+```
+
+Pipe command output into a model:
+
+```bash
+cargo test 2>&1 | ai --prompt debug
+```
+
+Run quietly for scripts by disabling status output and thinking colorization:
+
+```bash
+git diff | ai --minimal "summarize this patch"
+```
+
+Remove model reasoning text from the final output:
+
+```bash
+ai --strip-thinking "give me only the final answer"
+```
+
+Replay the most recent stored response:
+
+```bash
+ai --history 1
+```
+
+List configured model and prompt names:
+
+```bash
+ai --list-models
+ai --list-prompts
+```
+
 ## Flags
 
 - `--model NAME` select a model from `[models]` for one call.
@@ -41,15 +86,16 @@ The client reads `$XDG_CONFIG_HOME/ai/config.toml` (falls back to `~/.config/ai/
 
 ### Example
 
+Example config with multiple models and prompt presets:
+
 ```toml
 [defaults]
-model = "openai"
+model = "fast"
 prompt = "concise"
 minimal = false
 strip_thinking = false
 thinking_delimiters = [
   { start = "<think>", end = "</think>" },
-  { start = "[thought]", end = "[/thought]" },
 ]
 
 [history]
@@ -59,16 +105,22 @@ max_entries = 100
 [prompts.concise]
 text = "Be concise and direct."
 
-[models.openai]
+[prompts.debug]
+text = "Find the likely root cause and suggest the smallest useful fix."
+
+[models.fast]
 endpoint = "https://api.openai.com"
 model = "gpt-4o-mini"
-system_prompt = "You are a helpful assistant."
+system_prompt = "You are a practical CLI assistant."
 api_key_command = "pass show openai/api-key"
-options = "{\"reasoning\":{\"enabled\":true}}"
-strip_thinking = false
-thinking_delimiters = [
-  { start = "<think>", end = "</think>" },
-]
+
+[models.reasoning]
+endpoint = "https://api.openai.com/v1"
+model = "o3-mini"
+system_prompt = "Think carefully, then answer clearly."
+api_key_command = "pass show openai/api-key"
+options = "{\"reasoning\":{\"effort\":\"medium\"}}"
+strip_thinking = true
 ```
 
 ### Notes
